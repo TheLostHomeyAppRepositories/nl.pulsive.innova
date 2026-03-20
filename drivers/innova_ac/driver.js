@@ -106,23 +106,28 @@ class InnovaACDriver extends Homey.Driver {
 		console.log("Innova app - get_devices data: " + JSON.stringify(data));
 		console.log("Innova app - get_devices devices: " + JSON.stringify(devices));
 
-        let response = await fetch('http://' + data.ipaddress + '/api/v/1/status');
-		if(!response.ok) {
-			session.emit("not_found", null);		
-			console.log("Innova app - response is not ok");
-		} else {
-			console.log("Innova app - response is ok");
-			let responseObj = await response.json();
+        try {
+            let response = await fetch('http://' + data.ipaddress + '/api/v/1/status');
+            if(!response.ok) {
+                session.emit("not_found", null);		
+                console.log("Innova app - response is not ok");
+            } else {
+                console.log("Innova app - response is ok");
+                let responseObj = await response.json();
 
-			devices = [{
-				data: { id: responseObj.uid, uid: responseObj.UID, serial: responseObj.setup.serial },
-				name: data.deviceName,
-				settings: { "settingIPAddress": data.ipaddress }
-			}];
+                devices = [{
+                    data: { id: responseObj.uid, uid: responseObj.UID, serial: responseObj.setup.serial },
+                    name: data.deviceName,
+                    settings: { "settingIPAddress": data.ipaddress }
+                }];
 
-			// ready to continue pairing
-			session.emit("found", null);
-		}
+                // ready to continue pairing
+                session.emit("found", null);
+            }
+        } catch (err) {
+            console.log("Innova app - fetch/parse error: " + err.message);
+            session.emit("not_found", null);
+        }
 	});
 
 	// this method is run when Homey.emit('list_devices') is run on the front-end

@@ -49,14 +49,6 @@ class InnovaAC extends Homey.Device {
     }
   }  
 
-  async onCapabilityNightMode( value, opts ) {
-    if (value) {
-      await this.nightModeOn();
-    }else{
-      await this.nightModeOff();    
-    }
-  }  
-
   async onCapabilityFanSpeed( value, opts ) {
     await this.setFanSpeed(value);
   }  
@@ -245,11 +237,22 @@ class InnovaAC extends Homey.Device {
     
     return fetch(uri, { method: 'GET', timeout: 1500 })
     	.then(
-    	    res => { 
-    	      return res.json();
+    	    async res => {
+    	      if (!res.ok) {
+    	        this.log('qryStatus: HTTP error ' + res.status);
+    	        return null;
+    	      }
+    	      try {
+    	        return await res.json();
+    	      } catch (err) {
+    	        this.log('qryStatus: invalid JSON response', err.message);
+    	        return null;
+    	      }
     	    }, 
     	    err => { 
-    	      if (retry) this.updateIpAndRetry(retryCallback) 
+    	      this.log('qryStatus: fetch error', err.message);
+    	      if (retry) this.updateIpAndRetry(retryCallback);
+    	      return null;
     	    }
     	);
   }  
@@ -266,10 +269,22 @@ class InnovaAC extends Homey.Device {
     
 	return fetch(uri, { method: 'POST', body: new URLSearchParams(meta), timeout: 1500 })
         .then(async res => {
-		  return res.json().then(res => { return res.success; })
+          if (!res.ok) {
+            this.log('sendCommand: HTTP error ' + res.status);
+            return false;
+          }
+          try {
+            let json = await res.json();
+            return json.success;
+          } catch (err) {
+            this.log('sendCommand: invalid JSON response', err.message);
+            return false;
+          }
         }, err => { 
+          this.log('sendCommand: fetch error', err.message);
           if (retry) 
-            this.updateIpAndRetry(retryCallback) 
+            this.updateIpAndRetry(retryCallback);
+          return false;
         });
   }
   
@@ -285,14 +300,25 @@ class InnovaAC extends Homey.Device {
     };
     return fetch(uri, { timeout: 3000, headers: idHeaders})
       .then(async res => {
-        this.log(res);
-        var jsonBody = await res.json();
-        this.setSettings({ 
-          'settingIPAddress': jsonBody.net.ip 
-        });
-        this.log('Updated IP to ' + jsonBody.net.ip);
-        cb();
-      }, err => this.log(err));
+        if (!res.ok) {
+          this.log('updateIpAndRetry: HTTP error ' + res.status);
+          return;
+        }
+        try {
+          var jsonBody = await res.json();
+          if (jsonBody && jsonBody.net && jsonBody.net.ip) {
+            this.setSettings({ 
+              'settingIPAddress': jsonBody.net.ip 
+            });
+            this.log('Updated IP to ' + jsonBody.net.ip);
+            cb();
+          } else {
+            this.log('updateIpAndRetry: unexpected response structure', JSON.stringify(jsonBody));
+          }
+        } catch (err) {
+          this.log('updateIpAndRetry: invalid JSON response', err.message);
+        }
+      }, err => this.log('updateIpAndRetry: fetch error', err.message));
   }
 }
 
